@@ -1,0 +1,1 @@
+ALTER TABLE applications ADD COLUMN secret_hash VARCHAR(64) NOT NULL DEFAULT '';
