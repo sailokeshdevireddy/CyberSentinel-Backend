@@ -14,6 +14,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.UUID;
+import com.cybersentinel.model.RiskAssessment;
+import com.cybersentinel.model.enums.RiskSubjectType;
+import com.cybersentinel.repository.RiskAssessmentRepository;
 
 @Service
 public class EventProcessingService {
@@ -25,6 +28,7 @@ public class EventProcessingService {
     private final ThreatDetector threatDetector;
     private final IncidentFactory incidentFactory;
     private final ObjectMapper objectMapper;
+    private final RiskAssessmentRepository riskAssessmentRepository;
 
     public EventProcessingService(ApplicationRepository applicationRepository,
                                   SecurityEventRepository securityEventRepository,
@@ -32,7 +36,8 @@ public class EventProcessingService {
                                   RiskEngine riskEngine,
                                   ThreatDetector threatDetector,
                                   IncidentFactory incidentFactory,
-                                  ObjectMapper objectMapper) {
+                                  ObjectMapper objectMapper,
+                                  RiskAssessmentRepository riskAssessmentRepository) {
         this.applicationRepository = applicationRepository;
         this.securityEventRepository = securityEventRepository;
         this.apiCredentialService = apiCredentialService;
@@ -40,6 +45,7 @@ public class EventProcessingService {
         this.threatDetector = threatDetector;
         this.incidentFactory = incidentFactory;
         this.objectMapper = objectMapper;
+        this.riskAssessmentRepository = riskAssessmentRepository;
     }
 
     @Transactional
@@ -89,11 +95,24 @@ public class EventProcessingService {
         app.setLastEventAt(Instant.now());
         applicationRepository.save(app);
 
+        // 2b. Create and save Risk Assessment
+        RiskAssessment riskAssessment = riskAssessmentRepository.findBySubjectTypeAndSubjectId(RiskSubjectType.EVENT, event.getId())
+                .orElseGet(RiskAssessment::new);
+        riskAssessment.setSubjectType(RiskSubjectType.EVENT);
+        riskAssessment.setSubjectId(event.getId());
+        riskAssessment.setRiskScore(event.getRiskScore());
+        riskAssessment.setSeverity(event.getSeverity());
+        riskAssessment.setFactors("[]");
+        riskAssessment.setEvaluatedAt(Instant.now());
+        riskAssessmentRepository.save(riskAssessment);
+
         // 3. Threat Detector
-        threatDetector.analyze(event);
+        java.util.List<com.cybersentinel.model.Threat> threats = threatDetector.analyze(event);
 
         // 4. Incident Factory
-        incidentFactory.process(event);
+        for (com.cybersentinel.model.Threat threat : threats) {
+            incidentFactory.process(threat);
+        }
 
         return event;
     }
