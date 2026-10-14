@@ -42,7 +42,13 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI();
         String method = request.getMethod();
-        
+
+        // All OPTIONS preflight requests must bypass JWT so the CORS filter
+        // can respond before any authentication check runs.
+        if ("OPTIONS".equalsIgnoreCase(method)) {
+            return true;
+        }
+
         return (path.equals("/api/auth/register") && method.equals("POST")) ||
                (path.equals("/api/auth/login") && method.equals("POST")) ||
                (path.equals("/api/health") && method.equals("GET"));
